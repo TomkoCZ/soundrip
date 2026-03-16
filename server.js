@@ -1,7 +1,7 @@
 const express       = require('express');
 const cors          = require('cors');
 const axios         = require('axios');
-const ytdl          = require('@distube/ytdl-core');
+const ytdl          = require('youtube-dl-exec');
 const ffmpeg        = require('fluent-ffmpeg');
 const ffmpegBin     = require('ffmpeg-static');
 const { PassThrough } = require('stream');
@@ -79,26 +79,43 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-// ─── DOWNLOAD / CONVERT ───────────────────────────────────────────────────
+// ─── DOWNLOAD / CONVERT (pomocí yt-dlp) ───────────────────────────────────
 app.get('/api/download', async (req, res) => {
   const { videoId, title } = req.query;
   if (!videoId) return res.status(400).json({ error: 'Chybí ID videa.' });
 
-  const url      = `https://www.youtube.com/watch?v=${videoId}`;
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
   const safeName = (title || videoId).replace(/[<>:"/\\|?*\x00-\x1f]/g, '').trim().slice(0, 120);
 
   try {
-    const info        = await ytdl.getInfo(url);
-    const audioFormat = ytdl.chooseFormat(info.formats, { quality: 'highestaudio', filter: 'audioonly' });
-    const audioStream = ytdl.downloadFromInfo(info, { format: audioFormat });
+    // 1. Získáme metadata videa přes yt-dlp (nebudeme stahovat soubor na disk)
+    // 1. Získáme metadata videa přes yt-dlp (použijeme název proměnné z importu)
+const videoInfo = await ytdl(url, {
+  dumpSingleJson: true,
+  noWarnings: true,
+  noCallHome: true,
+  noCheckCertificate: true,
+  youtubeSkipDashManifest: true,
+});
 
+    // 2. Najdeme nejlepší audio formát (kde není video, jen zvuk)
+    const audioFormats = videoInfo.formats.filter(f => f.acodec !== 'none' && f.vcodec === 'none');
+    if (audioFormats.length === 0) {
+      throw new Error('Pro toto video nebyl nalezen žádný použitelný audio stream.');
+    }
+
+    // Seřadíme formáty od nejvyššího datového toku (abr = audio bitrate)
+    audioFormats.sort((a, b) => (b.abr || 0) - (a.abr || 0));
+    const bestAudioUrl = audioFormats[0].url;
+
+    // 3. Nastavení HTTP hlaviček pro prohlížeč
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(safeName + '.mp3')}`);
     res.setHeader('Transfer-Encoding', 'chunked');
     res.setHeader('Cache-Control', 'no-cache');
 
-    const pass = new PassThrough();
-    ffmpeg(audioStream)
+    // 4. Předáme přímou URL z YouTube rovnou do FFmpeg pro konverzi na MP3
+    ffmpeg(bestAudioUrl)
       .audioFrequency(44100)
       .audioBitrate(320)
       .audioChannels(2)
@@ -108,19 +125,18 @@ app.get('/api/download', async (req, res) => {
         if (!res.headersSent) res.status(500).json({ error: 'Chyba konverze: ' + err.message });
         else res.destroy();
       })
-      .pipe(pass);
-    pass.pipe(res);
+      .pipe(res); // Pipeujeme stream rovnou klientovi
 
   } catch (err) {
     console.error('Download error:', err.message);
     if (!res.headersSent) {
-      if (err.message?.includes('private')) return res.status(403).json({ error: 'Toto video je soukromé.' });
-      if (err.message?.includes('age'))     return res.status(403).json({ error: 'Toto video je věkově omezené.' });
+      if (err.message?.includes('Sign in')) return res.status(403).json({ error: 'YouTube zablokoval IP adresu serveru (vyžaduje přihlášení).' });
+      if (err.message?.includes('Private video')) return res.status(403).json({ error: 'Toto video je soukromé.' });
+      if (err.message?.includes('Age restricted')) return res.status(403).json({ error: 'Toto video je věkově omezené.' });
       res.status(500).json({ error: 'Nelze stáhnout: ' + err.message });
     }
   }
 });
-
 app.get('/api/health', (_req, res) => res.json({ status: 'ok', ffmpeg: ffmpegBin }));
 
 app.listen(PORT, () => console.log(`SoundRip bezi na portu ${PORT}`));

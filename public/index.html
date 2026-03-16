@@ -315,32 +315,75 @@
   $prev.addEventListener('click', () => search(currentQ, pageStack.pop()));
 
   /* ── search ── */
-  async function search(q, pageToken) {
-    q = (q ?? $in.value).trim();
-    if (!q) { toast('Zadejte prosím dotaz.', 'error'); $in.focus(); return; }
-    currentQ = q; $in.value = q;
-    $btn.disabled = true; $btn.textContent = 'Hledám…';
-    showState('loading');
+async function search(q, pageToken) {
+  q = (q ?? $in.value).trim();
+  if (!q) {
+    toast('Zadejte prosím dotaz.', 'error');
+    $in.focus();
+    return;
+  }
+
+  // --- OPRAVENÁ DETEKCE LINKU ---
+  const isUrl = q.includes('youtube.com/') || q.includes('youtu.be/');
+  if (isUrl) {
     try {
-      const url = `/api/search?q=${encodeURIComponent(q)}${pageToken ? '&pageToken=' + pageToken : ''}`;
-      const res  = await fetch(url);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-      nextToken = data.nextPageToken || null;
-      prevToken = data.prevPageToken || null;
-      if (!data.items?.length) { showState('no-results'); return; }
-      renderCards(data.items);
-      $statsCnt.innerHTML = `Zobrazeno <strong>${data.items.length}</strong> výsledků`;
-      showState('results');
-      updatePag();
+      let videoId = '';
+      if (q.includes('youtu.be/')) {
+        videoId = q.split('youtu.be/')[1]?.split(/[?#]/)[0];
+      } else {
+        const urlParams = new URLSearchParams(q.split('?')[1]);
+        videoId = urlParams.get('v');
+      }
+
+      if (videoId) {
+        toast('Získávám info o videu...', 'info');
+        
+        // Zkusíme najít název videa přes existující API search
+        const res = await fetch(`/api/search?q=${videoId}`);
+        const data = await res.json();
+        const videoTitle = (data.items && data.items[0]) ? data.items[0].title : "Video_z_odkazu";
+
+        // Zavoláme stahování s "falešným" card objektem, který nic nerozbije
+        download(videoId, videoTitle, { querySelector: () => ({ disabled: false, innerHTML: '' }) });
+        
+        $in.value = ''; 
+        return; 
+      }
     } catch (e) {
-      $errMsg.textContent = e.message;
-      showState('error');
-      toast(e.message, 'error');
-    } finally {
-      $btn.disabled = false; $btn.textContent = 'Hledat';
+      console.error("Chyba linku:", e);
+      toast('Nepodařilo se zpracovat odkaz.', 'error');
     }
   }
+
+  currentQ = q;
+  $in.value = q;
+  $btn.disabled = true;
+  $btn.textContent = 'Hledám…';
+  showState('loading');
+  try {
+    const url = `/api/search?q=${encodeURIComponent(q)}${pageToken ? '&pageToken=' + pageToken : ''}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    nextToken = data.nextPageToken || null;
+    prevToken = data.prevPageToken || null;
+    if (!data.items?.length) {
+      showState('no-results');
+      return;
+    }
+    renderCards(data.items);
+    $statsCnt.innerHTML = `Zobrazeno <strong>${data.items.length}</strong> výsledků`;
+    showState('results');
+    updatePag();
+  } catch (e) {
+    $errMsg.textContent = e.message;
+    showState('error');
+    toast(e.message, 'error');
+  } finally {
+    $btn.disabled = false;
+    $btn.textContent = 'Hledat';
+  }
+}
 
   /* ── render ── */
   function renderCards(items) {
@@ -400,12 +443,18 @@
     const done = document.getElementById(`done-${id}`);
     const derr = document.getElementById(`derr-${id}`);
 
-    btn.disabled = true;
-    btn.innerHTML = `<div class="spin"></div> Připravuji…`;
-    prog.classList.add('active');
-    done.classList.remove('active');
-    derr.classList.remove('active');
-    derr.textContent = '';
+    // Přidáme kontroly (tzv. optional chaining nebo IF), aby kód nespadl
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<div class="spin"></div> Připravuji…`;
+    }
+    
+    if (prog) prog.classList.add('active');
+    if (done) done.classList.remove('active');
+    if (derr) {
+        derr.classList.remove('active');
+        derr.textContent = '';
+    }
 
     toast('Spouštím konverzi MP3 na serveru…', 'info');
 
@@ -417,32 +466,38 @@
       }
       const blob    = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
-      const a       = document.createElement('a');
-      a.href        = blobUrl;
-      a.download    = `${title.replace(/[<>:"/\\|?*]/g,'').trim()}.mp3`;
+      const a        = document.createElement('a');
+      a.href         = blobUrl;
+      a.download     = `${title.replace(/[<>:"/\\|?*]/g,'').trim()}.mp3`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
 
-      prog.classList.remove('active');
-      done.classList.add('active');
+      if (prog) prog.classList.remove('active');
+      if (done) done.classList.add('active');
       toast('MP3 úspěšně staženo! 🎵', 'success');
 
       setTimeout(() => {
-        btn.disabled = false;
-        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Stáhnout znovu`;
-        done.classList.remove('active');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Stáhnout znovu`;
+        }
+        if (done) done.classList.remove('active');
       }, 5000);
     } catch(e) {
-      prog.classList.remove('active');
-      derr.textContent = '⚠ ' + e.message;
-      derr.classList.add('active');
-      btn.disabled = false;
-      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Zkusit znovu`;
+      if (prog) prog.classList.remove('active');
+      if (derr) {
+          derr.textContent = '⚠ ' + e.message;
+          derr.classList.add('active');
+      }
+      if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Zkusit znovu`;
+      }
       toast(e.message, 'error');
     }
-  }
+}
 
   /* ── helpers ── */
   function showState(s) {
