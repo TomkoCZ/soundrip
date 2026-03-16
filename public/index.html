@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SoundRip — YouTube → MP3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:         #080b10;
+      --surface:    #0e1219;
+      --card:       #131822;
+      --card-alt:   #181f2e;
+      --border:     rgba(255,255,255,.07);
+      --border2:    rgba(255,255,255,.12);
+      --accent:     #00e5ff;
+      --accent2:    #7c5cfc;
+      --accent3:    #ff4d6d;
+      --glow:       0 0 40px rgba(0,229,255,.18);
+      --txt:        #e8edf5;
+      --txt-dim:    #7a8499;
+      --txt-mute:   #3d4558;
+      --radius:     14px;
+      --radius-sm:  8px;
+      --radius-pill:999px;
+      --font-head:  'Syne', sans-serif;
+      --font-body:  'DM Sans', sans-serif;
+      --ease-out:   cubic-bezier(.16,1,.3,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--txt);
+      min-height: 100vh;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::selection { background: rgba(0,229,255,.25); }
+
+    /* noise */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E");
+      background-size: 256px; pointer-events: none; z-index: 0;
+    }
+
+    /* blobs */
+    .bg-blobs { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .blob { position: absolute; border-radius: 50%; filter: blur(120px); opacity: .12; }
+    .blob-1 { width:600px;height:600px;background:var(--accent2);top:-200px;right:-100px;animation:drift1 20s ease-in-out infinite alternate; }
+    .blob-2 { width:500px;height:500px;background:var(--accent);bottom:-150px;left:-100px;animation:drift2 25s ease-in-out infinite alternate; }
+    .blob-3 { width:300px;height:300px;background:var(--accent3);top:40%;left:40%;animation:drift3 18s ease-in-out infinite alternate;opacity:.08; }
+    @keyframes drift1 { to { transform:translate(80px,60px); } }
+    @keyframes drift2 { to { transform:translate(60px,-80px); } }
+    @keyframes drift3 { to { transform:translate(-60px,60px); } }
+
+    .wrap { position:relative;z-index:1;max-width:1140px;margin:0 auto;padding:0 24px; }
+
+    /* header */
+    header { position:sticky;top:0;z-index:100;backdrop-filter:blur(20px) saturate(180%);background:rgba(8,11,16,.7);border-bottom:1px solid var(--border); }
+    .nav { display:flex;align-items:center;justify-content:space-between;padding:16px 0; }
+    .logo { display:flex;align-items:center;gap:10px;text-decoration:none; }
+    .logo-icon { width:36px;height:36px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:10px;display:grid;place-items:center;font-size:18px;box-shadow:0 0 20px rgba(0,229,255,.3); }
+    .logo-text { font-family:var(--font-head);font-size:1.25rem;font-weight:800;letter-spacing:-.02em;color:var(--txt); }
+    .logo-text span { color:var(--accent); }
+    .nav-badge { font-size:.75rem;font-weight:500;color:var(--txt-dim);background:rgba(255,255,255,.06);border:1px solid var(--border);padding:4px 12px;border-radius:var(--radius-pill); }
+
+    /* hero */
+    .hero { padding:72px 0 56px;text-align:center; }
+    .hero-eyebrow { display:inline-flex;align-items:center;gap:8px;font-size:.8rem;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.2);padding:6px 16px;border-radius:var(--radius-pill);margin-bottom:28px; }
+    .hero-eyebrow::before { content:'';width:6px;height:6px;background:var(--accent);border-radius:50%;animation:pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)} }
+    .hero h1 { font-family:var(--font-head);font-size:clamp(2.4rem,5vw,4rem);font-weight:800;letter-spacing:-.04em;line-height:1.1;margin-bottom:18px; }
+    .hero h1 .gradient { background:linear-gradient(90deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+    .hero p { font-size:1.1rem;color:var(--txt-dim);font-weight:300;max-width:500px;margin:0 auto 48px;line-height:1.6; }
+
+    /* search */
+    .search-wrap { max-width:680px;margin:0 auto; }
+    .search-box { display:flex;align-items:center;background:var(--card);border:1.5px solid var(--border2);border-radius:var(--radius-pill);padding:6px 6px 6px 24px;gap:12px;transition:border-color .2s,box-shadow .2s; }
+    .search-box:focus-within { border-color:var(--accent);box-shadow:0 0 0 4px rgba(0,229,255,.1),var(--glow); }
+    .search-icon { color:var(--txt-dim);flex-shrink:0; }
+    .search-input { flex:1;border:none;background:transparent;color:var(--txt);font-family:var(--font-body);font-size:1rem;outline:none;min-width:0; }
+    .search-input::placeholder { color:var(--txt-mute); }
+    .search-btn { flex-shrink:0;padding:12px 28px;background:linear-gradient(135deg,var(--accent),#00b8d9);color:#030609;font-family:var(--font-head);font-size:.9rem;font-weight:700;border:none;border-radius:var(--radius-pill);cursor:pointer;transition:transform .15s var(--ease-out),box-shadow .2s,opacity .2s;white-space:nowrap; }
+    .search-btn:hover { transform:scale(1.04);box-shadow:0 0 20px rgba(0,229,255,.4); }
+    .search-btn:active { transform:scale(.97); }
+    .search-btn:disabled { opacity:.5;cursor:not-allowed;transform:none; }
+
+    /* stats */
+    .stats-bar { display:flex;align-items:center;justify-content:space-between;margin:48px 0 24px;flex-wrap:wrap;gap:12px;opacity:0;transform:translateY(12px);transition:opacity .4s var(--ease-out),transform .4s var(--ease-out); }
+    .stats-bar.visible { opacity:1;transform:none; }
+    .stats-count { font-size:.875rem;color:var(--txt-dim); }
+    .stats-count strong { color:var(--accent); }
+
+    /* grid */
+    .grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;margin-bottom:48px; }
+
+    /* card */
+    .card { background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;transition:transform .2s var(--ease-out),border-color .2s,box-shadow .2s;animation:fadeUp .4s var(--ease-out) both; }
+    .card:hover { transform:translateY(-4px);border-color:var(--border2);box-shadow:0 20px 60px rgba(0,0,0,.5); }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+    .card:nth-child(1){animation-delay:0ms}.card:nth-child(2){animation-delay:50ms}.card:nth-child(3){animation-delay:100ms}
+    .card:nth-child(4){animation-delay:150ms}.card:nth-child(5){animation-delay:200ms}.card:nth-child(6){animation-delay:250ms}
+    .card:nth-child(7){animation-delay:300ms}.card:nth-child(8){animation-delay:350ms}.card:nth-child(9){animation-delay:400ms}
+    .card:nth-child(10){animation-delay:450ms}.card:nth-child(11){animation-delay:500ms}.card:nth-child(12){animation-delay:550ms}
+
+    .card-thumb { position:relative;aspect-ratio:16/9;overflow:hidden;background:var(--card-alt); }
+    .card-thumb img { width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s var(--ease-out),filter .4s; }
+    .card:hover .card-thumb img { transform:scale(1.06);filter:brightness(.8); }
+    .card-duration { position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.85);color:#fff;font-size:.72rem;font-weight:600;padding:3px 8px;border-radius:5px;backdrop-filter:blur(4px); }
+    .card-play-overlay { position:absolute;inset:0;display:grid;place-items:center;opacity:0;transition:opacity .2s; }
+    .card:hover .card-play-overlay { opacity:1; }
+    .play-circle { width:52px;height:52px;background:rgba(0,229,255,.9);border-radius:50%;display:grid;place-items:center;box-shadow:0 0 30px rgba(0,229,255,.5); }
+    .play-circle svg { margin-left:3px; }
+
+    .card-body { padding:16px;flex:1;display:flex;flex-direction:column;gap:4px; }
+    .card-title { font-family:var(--font-head);font-size:.95rem;font-weight:700;line-height:1.35;color:var(--txt);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden; }
+    .card-meta { display:flex;align-items:center;gap:12px;margin-top:8px;font-size:.78rem;color:var(--txt-dim); }
+    .card-channel { font-weight:500; }
+    .card-views::before { content:'·';margin-right:6px; }
+
+    .card-footer { padding:12px 16px 16px;border-top:1px solid var(--border);display:flex;gap:8px; }
+
+    .btn-dl { flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 16px;background:linear-gradient(135deg,var(--accent),#00b8d9);color:#030609;font-family:var(--font-head);font-size:.82rem;font-weight:700;border:none;border-radius:var(--radius-sm);cursor:pointer;transition:transform .15s var(--ease-out),box-shadow .2s,opacity .15s;white-space:nowrap; }
+    .btn-dl:hover { transform:scale(1.03);box-shadow:0 0 16px rgba(0,229,255,.35); }
+    .btn-dl:active { transform:scale(.97); }
+    .btn-dl:disabled { opacity:.45;cursor:not-allowed;transform:none; }
+
+    .btn-yt { padding:11px 14px;background:rgba(255,255,255,.05);border:1px solid var(--border2);color:var(--txt-dim);border-radius:var(--radius-sm);text-decoration:none;display:grid;place-items:center;transition:all .15s;flex-shrink:0; }
+    .btn-yt:hover { background:rgba(255,77,109,.12);border-color:var(--accent3);color:var(--accent3); }
+
+    /* progress */
+    .dl-progress { display:none;flex-direction:column;gap:6px;padding:12px 16px 14px;border-top:1px solid var(--border); }
+    .dl-progress.active { display:flex; }
+    .dl-progress-label { font-size:.75rem;color:var(--txt-dim);display:flex;align-items:center;gap:6px; }
+    .spin { width:12px;height:12px;border:2px solid rgba(0,229,255,.3);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .dl-bar-wrap { height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden; }
+    .dl-bar { height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;animation:indeterminate 1.5s ease-in-out infinite;transform-origin:left; }
+    @keyframes indeterminate { 0%{transform:translateX(-100%) scaleX(.3)} 50%{transform:translateX(50%) scaleX(.5)} 100%{transform:translateX(200%) scaleX(.3)} }
+
+    .dl-done { display:none;padding:12px 16px 14px;border-top:1px solid rgba(0,229,255,.15);font-size:.78rem;color:var(--accent);gap:6px;align-items:center; }
+    .dl-done.active { display:flex; }
+    .dl-error { display:none;padding:10px 14px;border-top:1px solid rgba(255,77,109,.2);font-size:.75rem;color:var(--accent3);line-height:1.45; }
+    .dl-error.active { display:block; }
+
+    /* pagination */
+    .pagination { display:flex;justify-content:center;gap:12px;padding-bottom:64px;opacity:0;transition:opacity .3s; }
+    .pagination.visible { opacity:1; }
+    .btn-page { display:flex;align-items:center;gap:8px;padding:12px 24px;border:1px solid var(--border2);border-radius:var(--radius-pill);background:var(--card);color:var(--txt-dim);font-family:var(--font-body);font-size:.875rem;cursor:pointer;transition:all .15s; }
+    .btn-page:hover { border-color:var(--accent);color:var(--accent);background:rgba(0,229,255,.05); }
+    .btn-page:disabled { opacity:.3;cursor:not-allowed; }
+
+    /* states */
+    .state-view { display:none;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px;text-align:center;gap:16px; }
+    .state-view.visible { display:flex; }
+    .state-icon { font-size:3rem; }
+    .state-title { font-family:var(--font-head);font-size:1.4rem;font-weight:700; }
+    .state-body { color:var(--txt-dim);font-size:.95rem;line-height:1.6;max-width:380px; }
+
+    /* skeletons */
+    .skeleton-grid { display:none;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;margin-bottom:48px; }
+    .skeleton-grid.visible { display:grid; }
+    .skel-card { background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden; }
+    .skel-thumb { aspect-ratio:16/9;background:var(--card-alt); }
+    .skel-body { padding:16px; }
+    .skel-line { height:12px;background:var(--card-alt);border-radius:6px;margin-bottom:10px;animation:shimmer 1.5s ease-in-out infinite; }
+    .skel-line:last-child { width:60%;margin-bottom:0; }
+    .skel-line:first-child { width:90%; }
+    @keyframes shimmer { 0%,100%{opacity:.5}50%{opacity:1} }
+
+    /* toast */
+    .toasts { position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:9999; }
+    .toast { padding:14px 20px;border-radius:var(--radius-sm);font-size:.875rem;font-weight:500;max-width:340px;border:1px solid;backdrop-filter:blur(16px);animation:toastIn .3s var(--ease-out) both; }
+    .toast.success { background:rgba(0,229,255,.12);border-color:rgba(0,229,255,.3);color:var(--accent); }
+    .toast.error   { background:rgba(255,77,109,.12);border-color:rgba(255,77,109,.3);color:var(--accent3); }
+    .toast.info    { background:rgba(124,92,252,.12);border-color:rgba(124,92,252,.3);color:#b39dfc; }
+    .toast.out     { animation:toastOut .3s var(--ease-out) forwards; }
+    @keyframes toastIn  { from{opacity:0;transform:translateX(20px)} }
+    @keyframes toastOut { to{opacity:0;transform:translateX(20px)} }
+
+    footer { border-top:1px solid var(--border);padding:32px 0;text-align:center;font-size:.8rem;color:var(--txt-mute);position:relative;z-index:1; }
+    footer a { color:var(--txt-dim);text-decoration:none; }
+    footer a:hover { color:var(--accent); }
+
+    @media (max-width:600px) {
+      .hero { padding:48px 0 36px; }
+      .hero h1 { font-size:2rem; }
+      .search-btn { padding:12px 18px; }
+      .nav-badge { display:none; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="bg-blobs" aria-hidden="true">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+</div>
+
+<header>
+  <div class="wrap">
+    <nav class="nav">
+      <a class="logo" href="/">
+        <div class="logo-icon">🎵</div>
+        <span class="logo-text">Sound<span>Rip</span></span>
+      </a>
+      <div class="nav-badge">YouTube → MP3</div>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-eyebrow">Bezplatný konvertor</div>
+      <h1>Stáhněte si<br><span class="gradient">hudbu zdarma</span></h1>
+      <p>Vyhledejte libovolné YouTube video a stáhněte ho jako MP3 ve vysoké kvalitě.</p>
+      <div class="search-wrap" role="search">
+        <div class="search-box">
+          <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input id="search-input" class="search-input" type="search" placeholder="Hledat video nebo interpret…" autocomplete="off" spellcheck="false" aria-label="Vyhledávací pole" />
+          <button id="search-btn" class="search-btn">Hledat</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-live="polite">
+    <div class="wrap">
+      <div class="stats-bar" id="stats-bar">
+        <p class="stats-count" id="stats-count"></p>
+      </div>
+
+      <div class="skeleton-grid" id="skeleton-grid" aria-hidden="true">
+        <div class="skel-card"><div class="skel-thumb"></div><div class="skel-body"><div class="skel-line"></div><div class="skel-line"></div></div></div>
+        <div class="skel-card"><div class="skel-thumb"></div><div class="skel-body"><div class="skel-line"></div><div class="skel-line"></div></div></div>
+        <div class="skel-card"><div class="skel-thumb"></div><div class="skel-body"><div class="skel-line"></div><div class="skel-line"></div></div></div>
+        <div class="skel-card"><div class="skel-thumb"></div><div class="skel-body"><div class="skel-line"></div><div class="skel-line"></div></div></div>
+        <div class="skel-card"><div class="skel-thumb"></div><div class="skel-body"><div class="skel-line"></div><div class="skel-line"></div></div></div>
+        <div class="skel-card"><div class="skel-thumb"></div><div class="skel-body"><div class="skel-line"></div><div class="skel-line"></div></div></div>
+      </div>
+
+      <div class="grid" id="results-grid"></div>
+
+      <div class="state-view visible" id="state-empty">
+        <div class="state-icon">🎶</div>
+        <h2 class="state-title">Začněte vyhledávat</h2>
+        <p class="state-body">Zadejte název skladby nebo interpreta do pole výše.</p>
+      </div>
+      <div class="state-view" id="state-no-results">
+        <div class="state-icon">🔍</div>
+        <h2 class="state-title">Nic nenalezeno</h2>
+        <p class="state-body">Pro váš dotaz nebyly nalezeny žádné výsledky. Zkuste jiná klíčová slova.</p>
+      </div>
+      <div class="state-view" id="state-error">
+        <div class="state-icon">⚠️</div>
+        <h2 class="state-title">Chyba</h2>
+        <p class="state-body" id="error-msg"></p>
+      </div>
+
+      <div class="pagination" id="pagination">
+        <button class="btn-page" id="btn-prev" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Předchozí
+        </button>
+        <button class="btn-page" id="btn-next" disabled>
+          Další
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>SoundRip &mdash; Stahujte pouze obsah, ke kterému máte právo. Respektujte autorská práva.</p>
+  </div>
+</footer>
+
+<div class="toasts" aria-live="assertive"></div>
+
+<script>
+  /* ── refs ── */
+  const $in       = document.getElementById('search-input');
+  const $btn      = document.getElementById('search-btn');
+  const $grid     = document.getElementById('results-grid');
+  const $skel     = document.getElementById('skeleton-grid');
+  const $statsBar = document.getElementById('stats-bar');
+  const $statsCnt = document.getElementById('stats-count');
+  const $empty    = document.getElementById('state-empty');
+  const $noRes    = document.getElementById('state-no-results');
+  const $err      = document.getElementById('state-error');
+  const $errMsg   = document.getElementById('error-msg');
+  const $pag      = document.getElementById('pagination');
+  const $prev     = document.getElementById('btn-prev');
+  const $next     = document.getElementById('btn-next');
+  const $toasts   = document.querySelector('.toasts');
+
+  /* ── state ── */
+  let currentQ = '', nextToken = null, prevToken = null, pageStack = [];
+
+  /* ── events ── */
+  $btn.addEventListener('click', () => search());
+  $in.addEventListener('keydown', e => e.key === 'Enter' && search());
+  $next.addEventListener('click', () => { pageStack.push(prevToken); search(currentQ, nextToken); });
+  $prev.addEventListener('click', () => search(currentQ, pageStack.pop()));
+
+  /* ── search ── */
+  async function search(q, pageToken) {
+    q = (q ?? $in.value).trim();
+    if (!q) { toast('Zadejte prosím dotaz.', 'error'); $in.focus(); return; }
+    currentQ = q; $in.value = q;
+    $btn.disabled = true; $btn.textContent = 'Hledám…';
+    showState('loading');
+    try {
+      const url = `/api/search?q=${encodeURIComponent(q)}${pageToken ? '&pageToken=' + pageToken : ''}`;
+      const res  = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+      nextToken = data.nextPageToken || null;
+      prevToken = data.prevPageToken || null;
+      if (!data.items?.length) { showState('no-results'); return; }
+      renderCards(data.items);
+      $statsCnt.innerHTML = `Zobrazeno <strong>${data.items.length}</strong> výsledků`;
+      showState('results');
+      updatePag();
+    } catch (e) {
+      $errMsg.textContent = e.message;
+      showState('error');
+      toast(e.message, 'error');
+    } finally {
+      $btn.disabled = false; $btn.textContent = 'Hledat';
+    }
+  }
+
+  /* ── render ── */
+  function renderCards(items) {
+    $grid.innerHTML = '';
+    items.forEach(item => $grid.appendChild(buildCard(item)));
+  }
+
+  function buildCard(v) {
+    const el = document.createElement('article');
+    el.className = 'card';
+    el.innerHTML = `
+      <div class="card-thumb">
+        <img src="${esc(v.thumbnail)}" alt="${esc(v.title)}" loading="lazy" onerror="this.style.opacity='.2'"/>
+        <div class="card-duration">${esc(v.duration)}</div>
+        <div class="card-play-overlay" aria-hidden="true">
+          <div class="play-circle">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="#030609"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="card-body">
+        <h3 class="card-title">${esc(v.title)}</h3>
+        <div class="card-meta">
+          <span class="card-channel">${esc(v.channel)}</span>
+          ${v.views ? `<span class="card-views">${fmtViews(v.views)} zhlédnutí</span>` : ''}
+        </div>
+      </div>
+      <div class="card-footer">
+        <button class="btn-dl" data-id="${esc(v.videoId)}" data-title="${esc(v.title)}" aria-label="Stáhnout MP3">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Stáhnout MP3
+        </button>
+        <a class="btn-yt" href="${esc(v.url)}" target="_blank" rel="noopener noreferrer" title="Přehrát na YouTube">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23 7s-.3-1.9-1.2-2.7c-1.1-1.2-2.4-1.2-3-1.3C16.4 3 12 3 12 3s-4.4 0-6.8.1c-.6.1-1.9.1-3 1.3C1.3 5.2 1 7 1 7S.7 9.1.7 11.2v2c0 2.1.3 4.2.3 4.2s.3 1.9 1.2 2.7c1.1 1.2 2.6 1.1 3.3 1.2C7.6 21.5 12 21.5 12 21.5s4.4 0 6.8-.3c.6-.1 1.9-.1 3-1.3.9-.8 1.2-2.7 1.2-2.7s.3-2.1.3-4.2v-2C23.3 9.1 23 7 23 7zM9.7 15.5V8.4l8.1 3.6-8.1 3.5z"/></svg>
+        </a>
+      </div>
+      <div class="dl-progress" id="prog-${esc(v.videoId)}">
+        <div class="dl-progress-label"><div class="spin"></div>Konvertuji na MP3…</div>
+        <div class="dl-bar-wrap"><div class="dl-bar"></div></div>
+      </div>
+      <div class="dl-done" id="done-${esc(v.videoId)}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Staženo úspěšně!
+      </div>
+      <div class="dl-error" id="derr-${esc(v.videoId)}"></div>
+    `;
+    el.querySelector('.btn-dl').addEventListener('click', function() {
+      download(this.dataset.id, this.dataset.title, el);
+    });
+    return el;
+  }
+
+  /* ── download ── */
+  async function download(id, title, card) {
+    const btn  = card.querySelector('.btn-dl');
+    const prog = document.getElementById(`prog-${id}`);
+    const done = document.getElementById(`done-${id}`);
+    const derr = document.getElementById(`derr-${id}`);
+
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spin"></div> Připravuji…`;
+    prog.classList.add('active');
+    done.classList.remove('active');
+    derr.classList.remove('active');
+    derr.textContent = '';
+
+    toast('Spouštím konverzi MP3 na serveru…', 'info');
+
+    try {
+      const res = await fetch(`/api/download?videoId=${encodeURIComponent(id)}&title=${encodeURIComponent(title)}`);
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Chyba serveru' }));
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      const blob    = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a       = document.createElement('a');
+      a.href        = blobUrl;
+      a.download    = `${title.replace(/[<>:"/\\|?*]/g,'').trim()}.mp3`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+
+      prog.classList.remove('active');
+      done.classList.add('active');
+      toast('MP3 úspěšně staženo! 🎵', 'success');
+
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Stáhnout znovu`;
+        done.classList.remove('active');
+      }, 5000);
+    } catch(e) {
+      prog.classList.remove('active');
+      derr.textContent = '⚠ ' + e.message;
+      derr.classList.add('active');
+      btn.disabled = false;
+      btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Zkusit znovu`;
+      toast(e.message, 'error');
+    }
+  }
+
+  /* ── helpers ── */
+  function showState(s) {
+    $skel.classList.toggle('visible',   s === 'loading');
+    $grid.style.display               = s === 'results' ? 'grid' : 'none';
+    $empty.classList.toggle('visible', s === 'empty');
+    $noRes.classList.toggle('visible', s === 'no-results');
+    $err.classList.toggle('visible',   s === 'error');
+    $statsBar.classList.toggle('visible', s === 'results');
+    $pag.classList.toggle('visible',   s === 'results');
+  }
+  function updatePag() {
+    $next.disabled = !nextToken;
+    $prev.disabled = pageStack.length === 0;
+  }
+  function fmtViews(n) {
+    if (n >= 1e9) return (n/1e9).toFixed(1).replace('.',',') + ' mld';
+    if (n >= 1e6) return (n/1e6).toFixed(1).replace('.',',') + ' mil';
+    if (n >= 1e3) return (n/1e3).toFixed(0) + ' tis';
+    return String(n);
+  }
+  function esc(s) {
+    return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+  function toast(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.setAttribute('role','status');
+    el.textContent = msg;
+    $toasts.appendChild(el);
+    setTimeout(() => {
+      el.classList.add('out');
+      el.addEventListener('animationend', () => el.remove(), { once: true });
+    }, 4000);
+  }
+</script>
+</body>
+</html>

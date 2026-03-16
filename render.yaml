@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: soundrip
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: YOUTUBE_API_KEY
+        value: AIzaSyCC_5X2ouF7NqGwhUKXuUrKiJa63fVZw74
+      - key: PORT
+        value: 3000
